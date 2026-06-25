@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0b0e14;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            font-family: 'Courier New', 'JetBrains Mono', monospace;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 740px;
+            background: rgba(8, 12, 20, 0.85);
+            backdrop-filter: blur(4px);
+            border: 1px solid #00ffff;
+            border-radius: 12px;
+            padding: 1.2rem;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.15), inset 0 0 30px rgba(0, 255, 255, 0.03);
+            position: relative;
+        }
+
+        /* Glow line at top */
+        .chat-container::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 20%;
+            right: 20%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00ffff, transparent);
+            filter: blur(1px);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 0.6rem;
+            margin-bottom: 0.8rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.25);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #00ffff;
+            text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+        }
+
+        .header .status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ffff;
+            box-shadow: 0 0 8px #00ffff;
+            animation: pulse-dot 2s infinite;
+        }
+
+        .status-dot.offline {
+            background: #ff0044;
+            box-shadow: 0 0 8px #ff0044;
+            animation: none;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .messages {
+            height: 360px;
+            overflow-y: auto;
+            padding: 0.4rem 0;
+            margin-bottom: 0.8rem;
+            scrollbar-width: thin;
+            scrollbar-color: #00ffff transparent;
+        }
+
+        .messages::-webkit-scrollbar {
+            width: 4px;
+        }
+        .messages::-webkit-scrollbar-thumb {
+            background: #00ffff;
+            border-radius: 2px;
+            box-shadow: 0 0 8px #00ffff;
+        }
+        .messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .message {
+            padding: 0.3rem 0.5rem;
+            margin-bottom: 0.25rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            border-left: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+
+        .message.user {
+            color: #aaffff;
+            border-left-color: #00ffff;
+        }
+        .message.user::before {
+            content: "> ";
+            color: #00ffff;
+            opacity: 0.7;
+        }
+
+        .message.bot {
+            color: #ccf2ff;
+            border-left-color: rgba(0, 255, 255, 0.4);
+        }
+        .message.bot::before {
+            content: "◆ ";
+            color: #00ffff;
+            opacity: 0.6;
+        }
+
+        .message.error {
+            color: #ff4466;
+            border-left-color: #ff4466;
+        }
+        .message.error::before {
+            content: "✗ ";
+            color: #ff4466;
+        }
+
+        .typing-indicator {
+            display: none;
+            padding: 0.3rem 0.5rem;
+            color: rgba(0, 255, 255, 0.5);
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+        }
+        .typing-indicator.active {
+            display: block;
+        }
+
+        .typing-indicator::after {
+            content: '...';
+            animation: blink-dots 1.2s infinite;
+        }
+        @keyframes blink-dots {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+        }
+
+        .input-row {
+            display: flex;
+            gap: 0.6rem;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+            padding-top: 0.7rem;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 0.5rem 0.7rem;
+            background: rgba(0, 255, 255, 0.04);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 6px;
+            color: #ccf2ff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .input-row input:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 12px rgba(0, 255, 255, 0.15), inset 0 0 8px rgba(0, 255, 255, 0.05);
+        }
+
+        .input-row input::placeholder {
+            color: rgba(0, 255, 255, 0.25);
+        }
+
+        .input-row button {
+            padding: 0.5rem 1.2rem;
+            background: rgba(0, 255, 255, 0.08);
+            border: 1px solid #00ffff;
+            border-radius: 6px;
+            color: #00ffff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input-row button:hover {
+            background: rgba(0, 255, 255, 0.15);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+        }
+
+        .input-row button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .footer {
+            margin-top: 0.6rem;
+            font-size: 0.6rem;
+            color: rgba(0, 255, 255, 0.3);
+            text-align: center;
+            border-top: 1px solid rgba(0, 255, 255, 0.06);
+            padding-top: 0.5rem;
+            letter-spacing: 0.1em;
+        }
+
+        .footer .glow {
+            color: #00ffff;
+            text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+        }
+
+        /* Scanline effect (optional) */
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(0deg,
+                transparent 0px,
+                transparent 3px,
+                rgba(0, 255, 255, 0.01) 3px,
+                rgba(0, 255, 255, 0.01) 4px);
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="scanline"></div>
+
+    <div class="header">
+        <span>✦ arjun</span>
+        <div class="status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusLabel">ready</span>
+        </div>
+    </div>
+
+    <div class="messages" id="messages">
+        <div class="message bot">system online. awaiting input.</div>
+    </div>
+
+    <div class="typing-indicator" id="typing">transmitting</div>
+
+    <div class="input-row">
+        <input type="text" id="question" placeholder="enter command…" autofocus />
+        <button id="sendBtn">send</button>
+    </div>
+
+    <div class="footer">
+        <span class="glow">⏣</span> v0.1 · <span id="version">secure</span>
+    </div>
+</div>
+
+<script>
+    let API_URL = null;
+
+    fetch('config.json')
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        })
+        .then(config => {
+            if (!config.apiUrl) throw new Error('Missing apiUrl');
+            API_URL = config.apiUrl;
+            document.getElementById('question').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            document.getElementById('question').placeholder = 'enter command…';
+            document.getElementById('statusDot').classList.remove('offline');
+            document.getElementById('statusLabel').textContent = 'online';
+        })
+        .catch(err => {
+            console.error('Config error:', err);
+            document.getElementById('statusDot').classList.add('offline');
+            document.getElementById('statusLabel').textContent = 'offline';
+            const msg = document.createElement('div');
+            msg.className = 'message error';
+            msg.textContent = 'config.json unavailable.';
+            document.getElementById('messages').appendChild(msg);
+        });
+
+    const messagesEl = document.getElementById('messages');
+    const typingEl = document.getElementById('typing');
+    const inputEl = document.getElementById('question');
+    const sendBtn = document.getElementById('sendBtn');
+
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+
+    function addMessage(text, type = 'bot') {
+        const div = document.createElement('div');
+        div.className = `message ${type}`;
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return div;
+    }
+
+    function setTyping(visible) {
+        typingEl.classList.toggle('active', visible);
+    }
+
+    function setLoading(loading) {
+        sendBtn.disabled = loading || !API_URL;
+        inputEl.disabled = loading || !API_URL;
+        sendBtn.textContent = loading ? '…' : 'send';
+    }
+
+    async function sendQuestion(question) {
+        if (!question.trim() || !API_URL) return;
+
+        addMessage(question, 'user');
+        inputEl.value = '';
+
+        setTyping(true);
+        setLoading(true);
+
+        const botMsg = addMessage('', 'bot');
+        let fullAnswer = '';
+
+        try {
+            const response = await fetch(`${API_URL}/ask`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question }),
+            });
+
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error(`Server error: ${response.status} ${err}`);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                while (buffer.includes('\n')) {
+                    const idx = buffer.indexOf('\n');
+                    let line = buffer.slice(0, idx).trim();
+                    buffer = buffer.slice(idx + 1);
+
+                    if (!line || !line.startsWith('data: ')) continue;
+
+                    const jsonStr = line.slice(6);
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        if (data.token !== undefined && !data.done) {
+                            fullAnswer += data.token || '';
+                            botMsg.textContent = fullAnswer;
+                            messagesEl.scrollTop = messagesEl.scrollHeight;
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            if (!fullAnswer) botMsg.textContent = '(no response)';
+
+        } catch (err) {
+            console.error(err);
+            botMsg.textContent = 'error: ' + (err.message || 'transmission failed');
+            botMsg.className = 'message error';
+        } finally {
+            setTyping(false);
+            setLoading(false);
+            inputEl.focus();
+        }
+    }
+
+    sendBtn.addEventListener('click', () => { if (API_URL) sendQuestion(inputEl.value); });
+    inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (API_URL) sendQuestion(inputEl.value);
+        }
+    });
+</script>
+
+</body>
+</html>
