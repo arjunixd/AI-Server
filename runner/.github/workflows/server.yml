@@ -48,14 +48,12 @@ jobs:
           key: backend
 
       # Ollama Setup
+      - uses: ai-action/setup-ollama@v2
       - uses: actions/cache@v4
         id: ollama
         with:
           path: ~/.ollama/models
           key: ollama-granite4
-          
-      - if: steps.ollama.outputs.cache-hit != 'true'
-        uses: ai-action/setup-ollama@v2
 
       - if: steps.ollama.outputs.cache-hit != 'true'
         run: ollama pull ibm/granite4:3b-h
