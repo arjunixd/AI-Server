@@ -12,33 +12,22 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - uses: actions/checkout@v4
+      # Backend Setup    
+      - uses: actions/cache@v4
+        id: binary
+        with:
+          path: backend/backend
+          key: backend
+
+      - if: steps.binary.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/backend
           token: ${{ secrets.TOKEN }}
           path: backend
 
-      - uses: actions/cache@v4
-        id: binary
-        with:
-          path: backend/backend
-          key: backend-v1
-          restore-keys: backend-
-
-      - uses: actions/cache@v4
-        id: ollama
-        with:
-          path: ~/.ollama/models
-          key: ollama-granite4
-          restore-keys: ollama-
-
-      - uses: actions/cache@v4
-        id: cloudflared
-        with:
-          path: ./cloudflared
-          key: cloudflared
-
-      - uses: actions-rs/toolchain@v1
+      - if: steps.binary.outputs.cache-hit != 'true'
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
@@ -56,15 +45,33 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: backend/backend
-          key: backend-v1
+          key: backend
 
-      - uses: ai-action/setup-ollama@v2
-      - run: ollama pull ibm/granite4:3b-h
-
-      - uses: actions/cache/save@v4
+      # Ollama Setup
+      - uses: actions/cache@v4
+        id: ollama
         with:
           path: ~/.ollama/models
           key: ollama-granite4
+          
+      - if: steps.ollama.outputs.cache-hit != 'true'
+        uses: ai-action/setup-ollama@v2
+
+      - if: steps.ollama.outputs.cache-hit != 'true'
+        run: ollama pull ibm/granite4:3b-h
+
+      - if: steps.ollama.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-granite4
+
+      # Cloudflare Setup
+      - uses: actions/cache@v4
+        id: cloudflared
+        with:
+          path: ./cloudflared
+          key: cloudflared
 
       - if: steps.cloudflared.outputs.cache-hit != 'true'
         run: |
@@ -81,19 +88,19 @@ jobs:
         run: |
           cd backend
           ./backend &
-          
+
           for i in {1..10}; do
             curl -s http://localhost:8000/health | grep -q '"status":"ok"' && break
             sleep 2
           done
-          
+
           curl -s --fail http://localhost:8000/health | grep -q '"status":"ok"' || exit 1
 
           if [ ! -f ../cloudflared ]; then
             curl -Lo ../cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
             chmod +x ../cloudflared
           fi
-          
+
           pkill -f cloudflared 2>/dev/null || true
           ../cloudflared tunnel --protocol http2 --url http://localhost:8000 2>&1 | tee tunnel.log &
 
@@ -102,13 +109,13 @@ jobs:
             [ -n "$TUNNEL_URL" ] && break
             sleep 1
           done
-          
+
           echo "::notice::Tunnel URL: ${TUNNEL_URL}"
 
           CHAT_REPO="${{ github.repository_owner }}/chat"
           NEW_CONFIG=$(jq -n --arg url "$TUNNEL_URL" '{apiUrl: $url}')
           ENCODED=$(echo "$NEW_CONFIG" | base64 -w0)
-          
+
           FILE_INFO=$(curl -s -H "Authorization: Bearer ${{ secrets.TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${CHAT_REPO}/contents/config.json")
@@ -130,18 +137,18 @@ jobs:
               --arg email "github-actions[bot]@users.noreply.github.com" \
               '{message: $msg, content: $content, author: {name: $name, email: $email}, committer: {name: $name, email: $email}}')
           fi
-          
+
           curl -s -X PUT -H "Authorization: Bearer ${{ secrets.TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${CHAT_REPO}/contents/config.json" \
             -d "$PAYLOAD"
-          
+
           echo "::notice::Frontend URL: https://${{ github.repository_owner }}.github.io/chat/"
-          
+
           START_TIME=$(date +%s)
           TRIGGER_AT=$((350 * 60))
           TRIGGERED=false
-          
+
           while true; do
             ELAPSED=$(( $(date +%s) - START_TIME ))
             if [ $ELAPSED -ge $TRIGGER_AT ] && [ "$TRIGGERED" = "false" ]; then
@@ -151,12 +158,12 @@ jobs:
                 -d '{"ref":"${{ github.ref }}"}'
               TRIGGERED=true
             fi
-            
+
             if ! curl -s http://localhost:8000/health | grep -q '"status":"ok"'; then
               pkill -f backend 2>/dev/null || true
               ./backend &
             fi
-            
+
             if ! pgrep -f cloudflared > /dev/null; then
               ../cloudflared tunnel --protocol http2 --url http://localhost:8000 2>&1 | tee -a tunnel.log &
             fi
